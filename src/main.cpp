@@ -83,7 +83,7 @@ uint32_t img_buf_pos = 0;
 uint64_t startTime = 0;
 
 
-#if VALIDATE_SSL_CERTIFICATE == true
+#if VALIDATE_SSL_CERTIFICATE == 1
   /* Time aware for ESP32: Important to check SSL certs validity */
   void time_sync_notification_cb(struct timeval *tv)
   {
@@ -92,7 +92,7 @@ uint64_t startTime = 0;
 
   static void initialize_sntp(void)
   {
-      ESP_LOGI(TAG, "Initializing SNTP");
+      printf("Initializing SNTP\n");
       sntp_setoperatingmode(SNTP_OPMODE_POLL);
       sntp_setservername(0, "pool.ntp.org");
       sntp_set_time_sync_notification_cb(time_sync_notification_cb);
@@ -112,8 +112,8 @@ uint64_t startTime = 0;
       int retry = 0;
       const int retry_count = 10;
       while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
-          ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
-          vTaskDelay(2000 / portTICK_PERIOD_MS);
+          printf("Waiting for system time to be set... (%d/%d)\n", retry, retry_count);
+          vTaskDelay(1000 / portTICK_PERIOD_MS);
       }
       time(&now);
       localtime_r(&now, &timeinfo);
@@ -268,13 +268,13 @@ static void http_post(void)
      */
     esp_http_client_config_t config = {
         .url = IMG_URL,
-        #if VALIDATE_SSL_CERTIFICATE == true
+        .disable_auto_redirect = false,
+        .event_handler = _http_event_handler,
+        .buffer_size = HTTP_RECEIVE_BUFFER_SIZE,
+        #if VALIDATE_SSL_CERTIFICATE == 1
           // Research how to do this in Arduino-ESP32
           //.cert_pem = (char *)server_cert_pem_start,
         #endif
-        .disable_auto_redirect = false,
-        .event_handler = _http_event_handler,
-        .buffer_size = HTTP_RECEIVE_BUFFER_SIZE
         };
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -461,7 +461,8 @@ void setup()
   // Initialization: WiFi + clean screen while downloading image
   printf("Free heap before wifi_init_sta: %d\n", xPortGetFreeHeapSize());
   wifi_init_sta();
-  #if VALIDATE_SSL_CERTIFICATE == true
+  #if VALIDATE_SSL_CERTIFICATE == 1
+    printf("Calling time sync\n");
     obtain_time();
   #endif
   
