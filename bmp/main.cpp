@@ -34,8 +34,6 @@ uint8_t progressBarHeight = 12;
 // BMP debug Mode: Turn false for production since it will make things slower and dump Serial debug
 bool bmpDebug = false;
 
-static const char *TAG = "BMP";
-
 uint16_t countDataEventCalls = 0;
 uint32_t countDataBytes = 0;
 uint16_t in_red = 0;   // for depth 24
@@ -64,7 +62,8 @@ uint16_t forCount = 0;
 uint8_t mono_palette_buffer[32];        // palette buffer for depth <= 8 b/w
 uint16_t totalDrawPixels = 0;
 int color = 0xff;
-uint64_t startTime = 0;
+uint32_t startTime = 0;
+uint32_t endTime = 0;
 
 struct BmpHeader
 {
@@ -149,8 +148,14 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_DATA:
         ++countDataEventCalls;
+        
+        #if DEBUG_VERBOSE
         if (countDataEventCalls%10==0) {
-        printf("%d len:%d\n", countDataEventCalls, evt->data_len); }
+           printf("%d len:%d\n", countDataEventCalls, evt->data_len); 
+        }
+        #endif
+
+        if (isSupportedBitmap == false) break;
         dataLenTotal += evt->data_len;
         // Unless bmp.imageOffset initial skip we start reading stream always on byte pointer 0:
         bPointer = 0;
@@ -159,7 +164,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
         if (countDataEventCalls == 1)
         {
-            startTime = esp_timer_get_time();
+            startTime = millis();
             // Read BMP header -In total 34 bytes header
             bmp.fileSize = read32(output_buffer, 2);
             bmp.imageOffset = read32(output_buffer, 10);
@@ -173,7 +178,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             drawY = bmp.height;
             printf("BMP HEADERS\nfilesize:%d\noffset:%d\nW:%d\nH:%d\nplanes:%d\ndepth:%d\nformat:%d\n",
                      bmp.fileSize, bmp.imageOffset, bmp.width, bmp.height, bmp.planes, bmp.depth, bmp.format);
-
+            printf("Hold on. Downloading image...\n\n");
             if (bmp.depth == 1)
             {
                 isPaddingAware = true;
@@ -188,6 +193,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             {
                 isSupportedBitmap = false;
                 printf("BMP DEPTH %d: Only 1 and 24 bits depth are supported.\n", bmp.depth);
+                break;
             }
 
             rowSize = (bmp.width * bmp.depth / 8 + 3) & ~3;
@@ -369,7 +375,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             break;
 
             default:
-                ESP_LOGI(TAG, "Unsupported bit-depth mode: %d", bmp.depth); 
+                printf("ERROR: Unsupported bit-depth mode: %d", bmp.depth); 
             break;
             }
 
@@ -382,27 +388,25 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
                 progressBar(rowByteCounter, bmp.fileSize);
             }
         #endif
-
+        endTime = millis();
         if (bmpDebug)
             printf("Total drawPixel calls: %d\noutX: %d outY: %d\n", totalDrawPixels, drawX, drawY);
-
-        // Hexa dump:
-        //ESP_LOG_BUFFER_HEX(TAG, output_buffer, evt->data_len);
         break;
 
     case HTTP_EVENT_ON_FINISH:
-        printf("HTTP_EVENT_ON_FINISH\nDownload took: %llu ms\nRefresh and go to sleep %d minutes\n", (esp_timer_get_time()-startTime)/1000, DEEPSLEEP_MINUTES_AFTER_RENDER);
+        printf("HTTP_EVENT_ON_FINISH\nDownload time: %lu ms.\n\nRefresh and go to sleep %d minutes\n", endTime-startTime, DEEPSLEEP_MINUTES_AFTER_RENDER);
         epd_hl_update_screen(&hl, MODE_GC16, 25);
         
         if (bmpDebug) 
-            printf("Free heap after display render: %d\n", xPortGetFreeHeapSize());
-        //deepsleep();
+          printf("Free heap after display render: %d\n", xPortGetFreeHeapSize());
+          deepsleep();
         break;
 
-    case HTTP_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED\n");
+        case HTTP_EVENT_DISCONNECTED:
+          printf("HTTP_EVENT_DISCONNECTED\n");
         break;
     }
+
     return ESP_OK;
 }
 
@@ -565,7 +569,6 @@ void setup(void)
 
     // WiFi log level set only to Error otherwise outputs too much
     esp_log_level_set("wifi", ESP_LOG_ERROR);
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
     
     // Handle rotation
