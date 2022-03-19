@@ -2,7 +2,7 @@
 
 // Affects the gamma to calculate gray (lower is darker/higher contrast)
 // Nice test values: 0.9 1.2 1.4 higher and is too bright
-double gamma_value = 0.7;
+double gamma_value = 0.6;
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -443,9 +443,13 @@ void setup()
   printf("Free heap after buffers allocation: %d\n", xPortGetFreeHeapSize());
 
   double gammaCorrection = 1.0 / gamma_value;
-  for (int gray_value =0; gray_value<256;gray_value++)
-    gamme_curve[gray_value]= round (255*pow(gray_value/255.0, gammaCorrection));
-  
+  uint16_t gamma_calc = 0;
+  for (int gray_value =0; gray_value<256;gray_value++) {
+    gamma_calc = round(255*pow(gray_value/255.0, gammaCorrection));
+    //if (gamma_calc > 255) gamma_calc = 255;
+    gamme_curve[gray_value]= gamma_calc;
+  }
+
   #if JPEG_CPY_FRAMEBUFFER == false
     epd_set_rotation(DISPLAY_ROTATION);
   #endif
