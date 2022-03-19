@@ -26,11 +26,6 @@
 #include "epd_highlevel.h"
 EpdiyHighlevelState hl;
 uint8_t* fb;
-
-// Draws a progress bar when downloading (Just a demo: is faster without it)
-// And also writes in the same framebuffer as the image
-#define DOWNLOAD_PROGRESS_BAR true
-uint8_t progressBarHeight = 12;
 // BMP debug Mode: Turn false for production since it will make things slower and dump Serial debug
 bool bmpDebug = false;
 
@@ -96,31 +91,6 @@ uint32_t read32(uint8_t output_buffer[512], uint8_t startPointer)
     ((uint8_t *)&result)[2] = output_buffer[startPointer + 2];
     ((uint8_t *)&result)[3] = output_buffer[startPointer + 3]; // MSB
     return result;
-}
-
-// Draw light gray rectangle area 
-void progressBarPlacement() { 
-        EpdRect p_area = {
-            .x = 0,
-            .y = 0,
-            .width = EPD_WIDTH,
-            .height = progressBarHeight
-        };
-        epd_fill_rect(p_area, 200, fb);
-        epd_hl_update_area(&hl, MODE_GC16, 25, p_area);
-}
-
-void progressBar(long processed, long total)
-{
-  int percentage = round(processed * EPD_WIDTH / total);
-  EpdRect p_area = {
-      .x = 0,
-      .y = 0,
-      .width = percentage,
-      .height = progressBarHeight
-  };
-  epd_fill_rect(p_area, 0, fb);
-  epd_hl_update_area(&hl, MODE_DU, 25, p_area);
 }
 
 void deepsleep(){
@@ -383,11 +353,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
             imageBytesRead++;
             forCount++;
         }
-        #if DOWNLOAD_PROGRESS_BAR
-            if (imageBytesRead % (HTTP_RECEIVE_BUFFER_SIZE*bmp.depth/4) == 0) {
-                progressBar(rowByteCounter, bmp.fileSize);
-            }
-        #endif
+        
         endTime = millis();
         if (bmpDebug)
             printf("Total drawPixel calls: %d\noutX: %d outY: %d\n", totalDrawPixels, drawX, drawY);
@@ -473,12 +439,9 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         sprintf(espIpAddress,  IPSTR, IP2STR(&event->ip_info.ip));
-        printf("got ip: %s\n", espIpAddress);
+        printf("\ngot ip: %s\n", espIpAddress);
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        #if DOWNLOAD_PROGRESS_BAR
-          progressBarPlacement();
-        #endif
     }
 }
 
@@ -531,15 +494,15 @@ void wifi_init_sta(void)
     /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually happened. */
     if (bits & WIFI_CONNECTED_BIT)
     {
-        printf("connected to ap SSID:%s", ESP_WIFI_SSID);
+        printf("connected to ap SSID:%s\n", ESP_WIFI_SSID);
     }
     else if (bits & WIFI_FAIL_BIT)
     {
-        printf("Failed to connect to SSID:%s", ESP_WIFI_SSID);
+        printf("Failed to connect to SSID:%s\n", ESP_WIFI_SSID);
     }
     else
     {
-        printf("ERR: UNEXPECTED EVENT");
+        printf("ERR: UNEXPECTED EVENT\n");
     }
 
     /* The event will not be processed after unregister */
