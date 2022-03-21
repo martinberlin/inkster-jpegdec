@@ -52,7 +52,7 @@ JPEGDEC jpeg;
 
 // Affects the gamma to calculate gray (lower is darker/higher contrast) Note: That on true is slower
 // Nice test values: 0.9 1.2 1.4 higher and is too bright
-#define USE_GAMMA_CORRECTION false
+#define USE_GAMMA_CORRECTION true
 double gamma_value = 0.8;
 
 // Real pem cert of loremflickr.com
@@ -246,34 +246,51 @@ tjd_output(JDEC *jd,     /* Decompressor object of current session */
            JRECT *rect   /* Rectangular region to output */
 ) {
   uint32_t render_start = esp_timer_get_time();
+  
   uint32_t w = rect->right - rect->left + 1;
   uint32_t h = rect->bottom - rect->top + 1;
   uint32_t image_width = jd->width;
   uint8_t *bitmap_ptr = (uint8_t*)bitmap;
   
-  #if USE_GAMMA_CORRECTION == true
-    uint8_t buf[w*h];
+  // This pushes Image directly via SPI, which is not what we want here
+  //love.pushImage(rect->left, rect->top, w, h, (lgfx::rgb888_t*)bitmap);
+ 
+  for (uint32_t i = 0; i < w * h; i++) {
 
-    for (uint32_t i = 0; i < w * h; i++) {
-      uint8_t r = *(bitmap_ptr++);
-      uint8_t g = *(bitmap_ptr++);
-      uint8_t b = *(bitmap_ptr++);
-      
-      buf[i] = gamme_curve[(r*38 + g*75 + b*15)>>7];
-      // Avoid watchdog timer leaving some delay on each X row of the MCU
-      if (i%w == 0) {
-        rtc_wdt_feed();
-        vTaskDelay(4 / portTICK_PERIOD_MS);
-      }
+    uint8_t r = *(bitmap_ptr++);
+    uint8_t g = *(bitmap_ptr++);
+    uint8_t b = *(bitmap_ptr++);
+
+    // Calculate weighted grayscale (Not used now)
+    //uint32_t val = ((r * 30 + g * 59 + b * 11) / 100); // original formula
+    //uint32_t val = (r*38 + g*75 + b*15) >> 7; // @vroland recommended formula
+
+    int xx = rect->left + i % w;
+    if (xx < 0 || xx >= image_width) {
+      continue;
+    }
+    int yy = rect->top + i / w;
+    if (yy < 0 || yy >= jd->height) {
+      continue;
     }
 
-    love.pushImage(rect->left, rect->top, w, h, (lgfx::grayscale_t*)buf);
+    // Here would be great to hold back the pre-processed LovyanGFX image but now it simply uses the internal gray converted
+    // Write the pixel using color888
+    #if USE_GAMMA_CORRECTION == false
+      epd_draw_pixel(xx, yy, love.color888(r, g, b) , fb);
     #else
-    // Now working as expected (see image)
-    love.pushImage(rect->left, rect->top, w, h, (lgfx::bgr888_t*)bitmap);
-    // Atempt 1: ReadPixels from buffer and copy them to EPD framebuffer
-    //love.getPanel()->getBus()->readPixels()
-  #endif
+      epd_draw_pixel(xx, yy,  love.color888(gamme_curve[r], gamme_curve[g], gamme_curve[b]), fb);
+    #endif
+  }
+
+  // Copy the square processed by Lovyan into the EPD framebuffer (Could not find a way to return image)
+  /* EpdRect sq = {
+      .x = rect->left,
+      .y = rect->top,
+      .width = w,
+      .height = h
+  };
+  epd_copy_to_framebuffer(sq, (uint8_t*) bitmap, fb); */
 
   rtc_wdt_feed();
   time_render += (esp_timer_get_time() - render_start)/1000;
@@ -362,10 +379,8 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
           love.endWrite();
           
           // Refresh display
-          printf("\nepd_hl_update_screen\n");
-          epd_draw_pixel(10, 10, 0, fb);
-
-          love.getPanel()->getBus()->readBytes(fb, EPD_WIDTH*EPD_HEIGHT/2);
+          printf("\nepd_hl_update_screen -> Refresh EPD\n");
+          //epd_fill_circle(100, 100, 10, 0 , fb);
           epd_hl_update_screen(&hl, MODE_GC16, 25);
 
           printf("%d ms . image render\n", time_render);
@@ -545,13 +560,12 @@ void setup() {
   // Should be big enough to allocate the JPEG file size, width * height should suffice
   source_buf = (uint8_t *)heap_caps_malloc(ep_width * ep_height/2, MALLOC_CAP_SPIRAM);
   if (source_buf == NULL) {
-      ESP_LOGE("main", "Initial alloc source_buf failed!");
+      printf("ERROR:Initial alloc source_buf failed. Is PSRAM enabled?");
   }
   printf("Free heap after buffers allocation: %d\n", xPortGetFreeHeapSize());
 
   
   love.init();
-  printf("Lovyan initialized\n");
   // epd_fast:    LovyanGFX uses a 4×4 16pixel tile pattern to display a pseudo 17level grayscale.
   // epd_quality: Uses 16 levels of grayscale
   love.setEpdMode(epd_mode_t::epd_quality);
@@ -573,11 +587,10 @@ void setup() {
   esp_log_level_set("wifi", ESP_LOG_ERROR);
   
   // Initialization: WiFi + clean screen while downloading image
-  printf("Free heap before wifi_init_sta: %d\n", xPortGetFreeHeapSize());
   wifi_init_sta();
   #if VALIDATE_SSL_CERTIFICATE == true
     obtain_time();
   #endif
-  printf("Before http_post()\n");
+  
   http_post();
 }
