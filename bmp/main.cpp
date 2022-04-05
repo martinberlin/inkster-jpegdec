@@ -515,11 +515,10 @@ void loop() {}
 
 void setup(void)
 {
-    //Initialize EPDiy component
+    // Initialize EPDiy component
     epd_init(EPD_OPTIONS_DEFAULT);
     hl = epd_hl_init(EPD_BUILTIN_WAVEFORM);
     fb = epd_hl_get_framebuffer(&hl);
-    epd_clear();
 
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -533,6 +532,11 @@ void setup(void)
     // WiFi log level set only to Error otherwise outputs too much
     esp_log_level_set("wifi", ESP_LOG_ERROR);
     wifi_init_sta();
+    epd_poweron();
+    // Clear screen
+    #if EPD_START_CLEAR
+      epd_fullclear(&hl, 25);
+    #endif
     
     // Handle rotation
     epd_set_rotation(EPD_ROT_LANDSCAPE);
