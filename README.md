@@ -30,7 +30,10 @@ default_envs = 9inch
 src_dir = bmp
 ```
 
-The BMP example seems to work correctly and the results are 100% identical to the IDF original take.
+The BMP example seems to work correctly and the results are 100% identical to the IDF original take. 
+Please note that Bitmap downloads are larger than JPG and it only supports 1, 8 and 24 bits-depth bitmaps withouth any compressed format.
+
+
 
 The JPG version has a gamma correction that you can edit in main.cpp:
 
@@ -39,6 +42,9 @@ The JPG version has a gamma correction that you can edit in main.cpp:
 // Nice test values: 0.9 1.2 1.4 higher and is too bright
 double gamma_value = 0.7;
 ```
+
+At this point the JPG version has a bug and it renders the image differently than the original ESP-IDF (non-ported) version. If you discover what it is please make a pull-request.
+
 
 Enjoy and just create an issue if you find a bug. I will try to find time to fix it and make it better.
 If you like the repository and works for you, please bookmark it with a ⭐
