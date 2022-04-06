@@ -159,10 +159,10 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
                 isSupportedBitmap = false;
                 printf("BMP NOT SUPPORTED: Compressed formats not handled.\nBMP NOT SUPPORTED: Only planes==1, format 0 or 3\n");
             }
-            if (bmp.depth == 4 || bmp.depth == 8 || bmp.depth == 16 || bmp.depth > 24)
+            if (bmp.depth == 4 || bmp.depth == 16 || bmp.depth > 24)
             {
                 isSupportedBitmap = false;
-                printf("BMP DEPTH %d: Only 1 and 24 bits depth are supported.\n", bmp.depth);
+                printf("BMP DEPTH %d: Only 1, 8 and 24 bits depth are supported.\n", bmp.depth);
                 break;
             }
 
@@ -297,6 +297,17 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
                     ++drawX;
                 }
             }
+            break;
+
+            case 8:
+                if (drawX+1 > bmp.width)
+                    {
+                        drawX = 0;
+                        --drawY;
+                    }
+                epd_draw_pixel(drawX, drawY, in_byte, fb);
+                //printf("%d ", in_byte);
+                ++drawX;
             break;
 
             case 24:
